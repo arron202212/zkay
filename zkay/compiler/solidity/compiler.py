@@ -30,6 +30,7 @@ def compile_solidity_json(sol_filename: str, libs: Optional[Dict[str, str]] = No
     :param cwd: working directory
     :return: dictionary with the compilation results according to output_selection
     """
+    # print("--------compile_solidity_json--------")
     solp = pathlib.Path(sol_filename)
     json_in = {
         'language': 'Solidity',
@@ -62,7 +63,9 @@ def compile_solidity_json(sol_filename: str, libs: Optional[Dict[str, str]] = No
         cwd = solp.absolute().parent
     old_cwd = os.getcwd()
     os.chdir(cwd)
+    # print("====json_in=========",json_in)
     ret = compile_standard(json_in, allow_paths='.')
+    # print("====ret=========",ret)
     os.chdir(old_cwd)
     return ret
 
@@ -93,6 +96,7 @@ def check_compilation(filename: str, show_errors: bool = False, display_code: st
     sol_name = pathlib.Path(filename).name
     with open(filename) as f:
         code = f.read()
+    # print("===filename=======",filename,"code===",code)
     display_code = code if display_code is None else display_code
 
     had_error = False

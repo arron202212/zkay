@@ -190,6 +190,7 @@ class Expression(AST):
     def privacy_annotation_label(self):
         if isinstance(self, IdentifierExpr):
             if isinstance(self.target, Mapping):
+                # print("=============instantiated_key=========================",self.target)
                 return self.target.instantiated_key.privacy_annotation_label()
             else:
                 return self.target.idf
@@ -201,6 +202,7 @@ class Expression(AST):
             return None
 
     def instanceof_data_type(self, expected: TypeName) -> bool:
+        # print(self.annotated_type.type_name.implicitly_convertible_to(expected),self.annotated_type.type_name,type(self.annotated_type.type_name),"=======instanceof_data_type====3333=========",str(expected),type(expected))
         return self.annotated_type.type_name.implicitly_convertible_to(expected)
 
     def unop(self, op: str) -> FunctionCallExpr:
@@ -492,6 +494,14 @@ class FunctionCallExpr(Expression):
 
     def __init__(self, func: Expression, args: List[Expression], sec_start_offset: Optional[int] = 0):
         super().__init__()
+        # for arg in args:
+        #     print("==arg=====",type(arg),arg,end=",")
+        #     if isinstance(arg,ReclassifyExpr):
+        #         print("=======ReclassifyExpr==arg=====****************************=========")
+        #         import traceback
+        #         for line in traceback.format_stack():
+        #             print(line.strip())
+        # print("==args===end==",type(func))
         self.func = func
         self.args = args
         self.sec_start_offset = sec_start_offset
@@ -632,6 +642,10 @@ class IdentifierExpr(LocationExpr):
 
     def __init__(self, idf: Union[str, Identifier], annotated_type: Optional[AnnotatedTypeName] = None):
         super().__init__()
+        # if isinstance(idf,Identifier):
+        #     print("==idfname======",idf.name)
+        # else:
+        #     print("==idf======",idf)
         self.idf: Identifier = idf if isinstance(idf, Identifier) else Identifier(idf)
         self.annotated_type = annotated_type
 
@@ -649,11 +663,19 @@ class IdentifierExpr(LocationExpr):
         idf.target = self.target
         return idf
 
-
+flag=False
 class MemberAccessExpr(LocationExpr):
     def __init__(self, expr: LocationExpr, member: Identifier):
         super().__init__()
         assert isinstance(expr, LocationExpr)
+        # print("=MemberAccessExpr==new=====",type(expr),expr.idf.name,member.name)
+        # if member.name=="zk__in2_plain" or member.name=="zk__in1_key_sender":
+        #     # global flag
+        #     # if flag:
+        #     import traceback
+        #     for line in traceback.format_stack():
+        #         print(line.strip())
+        #     # flag=True
         self.expr = expr
         self.member = member
 
@@ -681,6 +703,9 @@ class SliceExpr(LocationExpr):
         self.base = base
         self.start_offset = start_offset
         self.size = size
+        # import traceback
+        # for line in traceback.format_stack():
+        #     print(line.strip())
 
 
 class MeExpr(Expression):
@@ -720,7 +745,12 @@ class AllExpr(Expression):
 class ReclassifyExpr(Expression):
 
     def __init__(self, expr: Expression, privacy: Expression, homomorphism: Optional[Homomorphism]):
+        # print("==ReclassifyExpr========",homomorphism)
+        # import traceback
+        # for line in traceback.format_stack():
+        #     print(line.strip())
         super().__init__()
+        # print("===ReclassifyExpr===new=============",type(expr),expr)
         self.expr = expr
         self.privacy = privacy
         self.homomorphism = homomorphism
@@ -736,9 +766,16 @@ class ReclassifyExpr(Expression):
 class RehomExpr(ReclassifyExpr):
 
     def __init__(self, expr: Expression, homomorphism: Homomorphism):
+        # print("==RehomExpr========",expr)
+        # try:
+        #     if expr.code()=="c_count":
+        #         print("=======$$$$$$$$$$$$$$$$$$$$$$$$$$$$$=====================")
+        # except:
+        #     pass
         super().__init__(expr, MeExpr(), homomorphism)
 
     def func_name(self):
+        # print("===RehomExpr====***************===========",self.homomorphism.rehom_expr_name)
         return self.homomorphism.rehom_expr_name
 
 
@@ -771,10 +808,19 @@ class HybridArgumentIdf(Identifier):
         else:
             assert self.arg_type == HybridArgType.PUB_CIRCUIT_ARG
             ma = IdentifierExpr(cfg.zk_data_var_name).dot(self).as_type(self.t)
+            # p=parent if (parent is None or isinstance(parent, Statement)) else parent.statement
+            # if p is not None:
+            # print("====get_loc_expr===#####################=======",ma)
+       
             return ma.override(parent=parent, statement=parent if (parent is None or isinstance(parent, Statement)) else parent.statement)
 
     def get_idf_expr(self, parent=None) -> IdentifierExpr:
         ie = IdentifierExpr(self.clone()).as_type(self.t)
+        # p=parent if (parent is None or isinstance(parent, Statement)) else parent.statement
+        # if p is not None:
+        #     print("====get_idf_expr==========",p,type(p))
+        # else:
+        #     print("===get_idf_expr========else====none=======",parent,self)
         return ie.override(parent=parent, statement=parent if (parent is None or isinstance(parent, Statement)) else parent.statement)
 
     def clone(self) -> HybridArgumentIdf:
@@ -801,11 +847,16 @@ class HybridArgumentIdf(Identifier):
             return self.get_loc_expr().assign(src.index(start_offset).explicitly_converted(self.t))
 
     def serialize(self, target_idf: str, base: Optional[Expression], start_offset: int) -> AssignmentStatement:
+        # if target_idf=="zk__in":
+        #     print("========serialize========begin=======")
         self._set_serialized_loc(target_idf, base, start_offset)
 
         tgt = IdentifierExpr(target_idf).as_type(Array(AnnotatedTypeName.uint_all()))
         if isinstance(self.t, Array):
-            return self.serialized_loc.assign(SliceExpr(self.get_loc_expr(), None, 0, self.t.size_in_uints))
+            res=self.serialized_loc.assign(SliceExpr(self.get_loc_expr(), None, 0, self.t.size_in_uints))
+            # if target_idf=="zk__in":
+            #      print("========serialize========array=======",res)
+            return res
         else:
             expr = self.get_loc_expr()
             if self.t.is_signed_numeric:
@@ -817,13 +868,16 @@ class HybridArgumentIdf(Identifier):
                 expr = expr.explicitly_converted(TypeName.uint_type())
 
             if base is not None:
+                # print("===serialize==============end========",tgt.clone().index(base.binop('+', NumberLiteralExpr(start_offset))).assign(expr))
                 return tgt.clone().index(base.binop('+', NumberLiteralExpr(start_offset))).assign(expr)
             else:
+                # print("===serialize=====none=========end========",tgt.clone().index(start_offset).assign(expr))
                 return tgt.clone().index(start_offset).assign(expr)
 
 
 class EncryptionExpression(ReclassifyExpr):
     def __init__(self, expr: Expression, privacy: PrivacyLabelExpr, homomorphism: Homomorphism):
+        # print("==EncryptionExpression========",homomorphism)
         if isinstance(privacy, Identifier):
             privacy = IdentifierExpr(privacy)
         super().__init__(expr, privacy, homomorphism)
@@ -1306,6 +1360,7 @@ class UserDefinedTypeName(TypeName):
         self.target = target
 
     def clone(self) -> UserDefinedTypeName:
+        # print("=======UserDefinedTypeName========clone============================")
         return UserDefinedTypeName(self.names.copy(), self.target)
 
     def __eq__(self, other):
@@ -1383,6 +1438,7 @@ class AddressPayableTypeName(UserDefinedTypeName):
 class Mapping(TypeName):
 
     def __init__(self, key_type: ElementaryTypeName, key_label: Optional[Identifier], value_type: AnnotatedTypeName):
+        # print("==Mapping===new========",key_label,value_type,value_type.type_name)
         super().__init__()
         self.key_type = key_type
         self.key_label: Union[str, Optional[Identifier]] = key_label
@@ -1393,10 +1449,16 @@ class Mapping(TypeName):
     def process_children(self, f: Callable[[T], T]):
         self.key_type = f(self.key_type)
         if isinstance(self.key_label, Identifier):
+            # print("===Mapping===========key_label==========",self.key_label.name,type(self.key_label))
             self.key_label = f(self.key_label)
+        # print(self,"===Mapping========before=========",type(self.value_type.type_name))
         self.value_type = f(self.value_type)
+        # print(self,"===Mapping========after=========",type(self.value_type.type_name))
 
     def clone(self) -> Mapping:
+        # import traceback
+        # for line in traceback.format_stack():
+        #     print(line.strip())
         from zkay.zkay_ast.visitor.deep_copy import deep_copy
         return deep_copy(self)
 
@@ -1611,6 +1673,11 @@ class AnnotatedTypeName(AST):
         self.type_name = type_name
         self.had_privacy_annotation = privacy_annotation is not None
         if self.had_privacy_annotation:
+            # if isinstance(privacy_annotation,MeExpr):
+            #     print("=====privacy_annotation==========",privacy_annotation,type(privacy_annotation))
+                # import traceback
+                # for line in traceback.format_stack():
+                #     print(line.strip())
             self.privacy_annotation = privacy_annotation
         else:
             self.privacy_annotation = AllExpr()
@@ -1927,6 +1994,8 @@ class EnumDefinition(NamespaceDefinition):
 
 class StructDefinition(NamespaceDefinition):
     def __init__(self, idf: Identifier, members: List[VariableDeclaration]):
+        # for m in members:
+        #     print("===member===",type(m))
         super().__init__(idf)
         self.members = members
 
@@ -2165,11 +2234,14 @@ class CodeVisitor(AstVisitor):
     def visit_list(self, l: List[Union[AST, str]], sep='\n'):
         if l is None:
             return 'None'
-
+        # if self.log:
+        #     print("======visit_list===",type(l))
         def handle(e: Union[AST, str]):
             if isinstance(e, str):
                 return e
             else:
+                # if self.log:
+                #     print("======stmt type===",type(e))
                 return self.visit(e)
 
         s = filter(None.__ne__, [handle(e) for e in l])
@@ -2189,6 +2261,7 @@ class CodeVisitor(AstVisitor):
         raise NotImplementedError("Did not implement code generation for " + repr(ast))
 
     def visitComment(self, ast: Comment):
+        # print("====visitComment===========",ast.text )
         if ast.text == '':
             return ''
         elif ast.text.find('\n') != -1:
@@ -2257,6 +2330,7 @@ class CodeVisitor(AstVisitor):
     def visitIfStatement(self, ast: IfStatement):
         c = self.visit(ast.condition)
         t = self.visit_single_or_list(ast.then_branch)
+        # print("===visitIfStatement=========",t,type(ast.then_branch))
         ret = f'if ({c}) {t}'
         if ast.else_branch:
             e = self.visit_single_or_list(ast.else_branch)
@@ -2309,7 +2383,8 @@ class CodeVisitor(AstVisitor):
         if ast.lhs.annotated_type is not None and ast.lhs.annotated_type.is_private():
             op = ''
         rhs = ast.rhs.args[1] if op else ast.rhs
-
+        # if self.log:
+        #     print("===visitAssignmentStatement======",type(lhs),op,type(rhs))
         if op.startswith('pre'):
             op = op[3:]
             fstr = '{1}{0};'
@@ -2356,6 +2431,7 @@ class CodeVisitor(AstVisitor):
         return self.visit_list(ast.statements)
 
     def visitBlock(self, ast: Block):
+        # print("=====visitBlock========", len(ast.statements))
         b = self.handle_block(ast).rstrip()
         if ast.was_single_statement and len(ast.statements) == 1:
             return b
@@ -2369,7 +2445,10 @@ class CodeVisitor(AstVisitor):
         return ast.name
 
     def visitUserDefinedTypeName(self, ast: UserDefinedTypeName):
-        return self.visit_list(ast.names, '.')
+        res=self.visit_list(ast.names, '.')
+        # print("===visitUserDefinedTypeName=============",res)
+        
+        return res
 
     def visitAddressTypeName(self, ast: AddressTypeName):
         return 'address'
@@ -2380,16 +2459,19 @@ class CodeVisitor(AstVisitor):
     def visitAnnotatedTypeName(self, ast: AnnotatedTypeName):
         t = self.visit(ast.type_name)
         p = self.visit(ast.privacy_annotation)
+        # print("==visitAnnotatedTypeName==========",p)
         if ast.had_privacy_annotation:
             return f'{t}@{p}{ast.homomorphism}'
         return t
 
     def visitMapping(self, ast: Mapping):
         k = self.visit(ast.key_type)
+        # print("==visitMapping======ast.key_label======",ast.key_label,type(ast.key_label))
         if isinstance(ast.key_label, Identifier):
             label = '!' + self.visit(ast.key_label)
         else:
             label = f'/*!{ast.key_label}*/' if ast.key_label is not None else ''
+        # print("===visitMapping======value_type.type_name========",type(ast.value_type.type_name))
         v = self.visit(ast.value_type)
         return f"mapping({k}{label} => {v})"
 
@@ -2402,6 +2484,7 @@ class CodeVisitor(AstVisitor):
         return f'{t}[{e}]'
 
     def visitCipherText(self, ast: CipherText):
+        # print("===visitCipherText==============",ast.plain_type.code(),type(ast.plain_type.type_name))
         e = self.visitArray(ast)
         return f'{e}/*{ast.plain_type.code()}*/'
 
@@ -2413,8 +2496,9 @@ class CodeVisitor(AstVisitor):
         keywords = [k for k in ast.keywords if self.display_final or k != 'final']
         k = ' '.join(keywords)
         t = self.visit(ast.annotated_type)
-        s = '' if ast.storage_location is None else f' {ast.storage_location}'
+        s = '' if ast.storage_location is None or len(ast.storage_location.strip())==0 else f' {ast.storage_location}'
         i = self.visit(ast.idf)
+        # print(f"==visitVariableDeclaration===t==k={k}==t= {t}=s=={s} ==i={i}==",)
         return f'{k} {t}{s} {i}'.strip()
 
     def visitVariableDeclarationStatement(self, ast: VariableDeclarationStatement):
@@ -2434,13 +2518,20 @@ class CodeVisitor(AstVisitor):
             i = None
         else:
             i = self.visit(ast.idf)
+            # print(f"=ti={t}{ast.storage_location is None}{i}=====")
 
         description = [f, t, ast.storage_location, i]
-        description = [d for d in description if d is not None]
+        description = [d for d in description if d is not None and len(d)>0]
         s = ' '.join(description)
+        # print(f"=s={s}=====")
         return s
 
     def visitConstructorOrFunctionDefinition(self, ast: ConstructorOrFunctionDefinition):
+        if ast.idf.name=="vote":
+            self.log=True
+        else:
+            self.log=False
+        # print("====visitConstructorOrFunctionDefinition===========",ast.idf.name,type(ast.body))
         b = self.visit_single_or_list(ast.body)
         return self.function_definition_to_str(ast.idf, ast.parameters, ast.modifiers, ast.return_parameters, b)
 
@@ -2485,7 +2576,8 @@ class CodeVisitor(AstVisitor):
     def visitStructDefinition(self, ast: StructDefinition):
         # Define struct with members in order of descending size (to get maximum space savings through packing)
         members_by_descending_size = sorted(ast.members, key=cmp_to_key(self.__cmp_type_size), reverse=True)
-
+        # for member in members_by_descending_size:
+        #     print("===member==============",type(member))
         body = '\n'.join([f'{self.visit(member)};' for member in members_by_descending_size])
         return f'struct {self.visit(ast.idf)} {{\n{indent(body)}\n}}'
 

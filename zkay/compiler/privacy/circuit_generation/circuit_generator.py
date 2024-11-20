@@ -69,10 +69,12 @@ class CircuitGenerator(metaclass=ABCMeta):
             zk_print(f'Generating keys for {c_count} circuits...')
             with time_measure('key_generation', True):
                 if self.parallel_keygen and not cfg.is_unit_test:
+                    print("========_generate_keys_par=============")
                     counter = Value('i', 0)
                     with Pool(processes=self.p_count, initializer=self.__init_worker, initargs=(counter, c_count,)) as pool:
                         pool.map(self._generate_keys_par, modified_circuits_to_prove)
                 else:
+                    print("========_generate_keys=============")
                     for circ in modified_circuits_to_prove:
                         self._generate_keys(circ)
 
@@ -82,6 +84,7 @@ class CircuitGenerator(metaclass=ABCMeta):
                 pk_hash = self._get_prover_key_hash(circuit)
                 with open(os.path.join(self.output_dir, circuit.verifier_contract_filename), 'w') as f:
                     primary_inputs = self._get_primary_inputs(circuit)
+                    # print("=====primary_inputs===len========",len(primary_inputs))
                     f.write(self.proving_scheme.generate_verification_contract(vk, circuit, primary_inputs, pk_hash))
 
     def get_all_key_paths(self) -> List[str]:
@@ -167,9 +170,11 @@ class CircuitGenerator(metaclass=ABCMeta):
         inputs = circuit.public_arg_arrays
 
         if cfg.should_use_hash(circuit):
+            # print("===cfg====",len([self.proving_scheme.hash_var_name]))
             return [self.proving_scheme.hash_var_name]
         else:
             primary_inputs = []
             for name, count in inputs:
                 primary_inputs += [f'{name}[{i}]' for i in range(count)]
+            # print("===cfg==else==")
             return primary_inputs

@@ -16,6 +16,7 @@ class SolidityVisitor(CodeVisitor):
 
     def visitAnnotatedTypeName(self, ast: AnnotatedTypeName):
         # only display data type, not privacy annotation
+        # print("=====visitAnnotatedTypeName========type_name==========",type(ast.type_name))
         t = self.visit(ast.type_name)
         return t
 

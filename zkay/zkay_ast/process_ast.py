@@ -70,7 +70,7 @@ def process_ast(ast, parents=True, link_identifiers=True, check_return=True, ali
         except AstException as e:
             raise AnalysisException(f'\n\nANALYSIS ERROR: {e}')
     if type_check:
-        with print_step("Zkay type checking"):
+        with print_step("Zkay type debug checking"):
             try:
                 t(ast)
                 check_circuit_compliance(ast)

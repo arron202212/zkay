@@ -48,13 +48,14 @@ class AliasAnalysisVisitor(AstVisitor):
 
     def visitBlock(self, ast: Block):
         last = ast.before_analysis.copy()
-
+        # print("==last==s===",str(last))
         # add fresh names from this block
         for name in ast.names.values():
+            # print(str(name))
             last.insert(name)
-
+        # print("==last=====",str(last))
         ast.after_analysis = self.propagate(ast.statements, last)
-
+        # print("==ast.after_analysis=====",str(ast.after_analysis))
         # remove names falling out of scope
         for name in ast.names.values():
             ast.after_analysis.remove(name)
@@ -140,7 +141,7 @@ class AliasAnalysisVisitor(AstVisitor):
 
         skip_loop = self.cond_analyzer.analyze(ast.condition.unop('!'), ast.init.after_analysis)
         did_loop = self.cond_analyzer.analyze(ast.condition.unop('!'), ast.update.after_analysis if ast.update else ast.body.after_analysis)
-
+        # print("==vf=====",str(ast.condition.unop('!')),ast.update, str(ast.update.after_analysis if ast.update else ast.body.after_analysis))
         # join
         ast.after_analysis = skip_loop.join(did_loop)
 
@@ -149,6 +150,7 @@ class AliasAnalysisVisitor(AstVisitor):
             ast.after_analysis.remove(name)
 
     def visitVariableDeclarationStatement(self, ast: VariableDeclarationStatement):
+        # print(ast.code())
         e = ast.expr
         if e and has_side_effects(e):
             ast.before_analysis = ast.before_analysis.separate_all()
@@ -162,8 +164,9 @@ class AliasAnalysisVisitor(AstVisitor):
 
         # name of variable is already in list
         name = ast.variable_declaration.idf
+        # print(str(after))
         assert (after.has(name))
-
+        # print(str(name))
         # make state more precise
         if e and e.privacy_annotation_label():
             after.merge(name, e.privacy_annotation_label())

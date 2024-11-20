@@ -15,6 +15,7 @@ from zkay.zkay_ast.visitor.visitor import AstVisitor
 
 
 def type_check(ast):
+    # print("===========type_check==================")
     check_final(ast)
     v = TypeCheckVisitor()
     v.visit(ast)
@@ -23,6 +24,8 @@ def type_check(ast):
 class TypeCheckVisitor(AstVisitor):
 
     def get_rhs(self, rhs: Expression, expected_type: AnnotatedTypeName):
+        # if rhs.annotated_type is not None:
+        #      print("==^^^^^^^^^^^^^^^^^^^^^^^===get_rhs=====MeExpr======",rhs,type(rhs.annotated_type.privacy_annotation))
         if isinstance(rhs, TupleExpr):
             if not isinstance(rhs, TupleExpr) or not isinstance(expected_type.type_name, TupleType) or len(rhs.elements) != len(expected_type.type_name.types):
                 raise TypeMismatchException(expected_type, rhs.annotated_type, rhs)
@@ -31,8 +34,8 @@ class TypeCheckVisitor(AstVisitor):
 
         require_rehom = False
         instance = rhs.instanceof(expected_type)
-
         if not instance:
+            # print("=======require_rehom=============",instance,rhs,expected_type)
             require_rehom = True
             expected_matching_hom = expected_type.with_homomorphism(rhs.annotated_type.homomorphism)
             instance = rhs.instanceof(expected_matching_hom)
@@ -40,12 +43,15 @@ class TypeCheckVisitor(AstVisitor):
         if not instance:
             raise TypeMismatchException(expected_type, rhs.annotated_type, rhs)
         else:
+            # print("===rhs type========",type(rhs.annotated_type.type_name ),type(expected_type.type_name),type(rhs),rhs)
             if rhs.annotated_type.type_name != expected_type.type_name:
+                # print("=== implicitly_converted_to=========##########==in=====",type(rhs.annotated_type.privacy_annotation),type(expected_type.privacy_annotation))
                 rhs = self.implicitly_converted_to(rhs, expected_type.type_name)
-
+            # print("==rhs type===after======",type(rhs),rhs)
             if instance == 'make-private':
                 return self.make_private(rhs, expected_type.privacy_annotation, expected_type.homomorphism)
             elif require_rehom:
+                # print("require_rehom=======try_rehom======",expected_type)
                 return self.try_rehom(rhs, expected_type)
             else:
                 return rhs
@@ -104,6 +110,7 @@ class TypeCheckVisitor(AstVisitor):
         all_args_all_or_me = all(map(lambda x: x.annotated_type.is_accessible(ast.analysis), ast.args))
         is_public_ite = func.is_ite() and ast.args[0].annotated_type.is_public()
         if all_args_all_or_me or is_public_ite:
+            # print(ast,"==========idf=========",func.op)
             self.handle_unhom_builtin_function_call(ast, func)
         else:
             self.handle_homomorphic_builtin_function_call(ast, func)
@@ -123,6 +130,7 @@ class TypeCheckVisitor(AstVisitor):
                 # Everything is turned private
                 func.is_private = True
                 a = res_t.annotate(Expression.me_expr())
+                # print("========MeExpr====cond_t.is_private==handle_unhom_builtin_function_call=====")
             else:
                 hom = self.combine_homomorphism(ast.args[1], ast.args[2])
                 true_type = ast.args[1].annotated_type.with_homomorphism(hom)
@@ -133,12 +141,16 @@ class TypeCheckVisitor(AstVisitor):
             ast.args[2] = self.get_rhs(ast.args[2], a)
 
             ast.annotated_type = a
+            #print(ast,"==========func.is_ite()=========",func.op)
             return
 
         # Check that argument types conform to op signature
+       
         parameter_types = func.input_types()
         if not func.is_eq():
+            # print("=======str(func)==================",func.op)
             for arg, t in zip(ast.args, parameter_types):
+                #print(arg.instanceof_data_type(t),type(arg),"======typename=======",type(arg.annotated_type.type_name),"=======TypeMismatchException=============",type(t))
                 if not arg.instanceof_data_type(t):
                     raise TypeMismatchException(t, arg.annotated_type.type_name, arg)
 
@@ -163,9 +175,12 @@ class TypeCheckVisitor(AstVisitor):
                 out_t = NumberLiteralType(res)
             if func.is_eq():
                 arg_t = t1.to_abstract_type().combined_type(t2.to_abstract_type(), True)
+            #print("===============1")
         elif func.output_type() == TypeName.bool_type():
+            #print("===============2")
             out_t = TypeName.bool_type()
         else:
+            #print("===============3")
             out_t = arg_t
 
         assert arg_t is not None and (arg_t != 'lit' or not func.is_eq())
@@ -211,11 +226,15 @@ class TypeCheckVisitor(AstVisitor):
         if arg_t != 'lit':
             # Add implicit casts for arguments
             arg_pt = arg_t.annotate(p)
+            # if isinstance(p,MeExpr):
+            #     print("======MeExpr=========arg_t != 'lit'=========")
             if func.is_shiftop() and p is not None:
                 ast.args[0] = self.get_rhs(ast.args[0], arg_pt)
             else:
                 ast.args[:] = map(lambda argument: self.get_rhs(argument, arg_pt), ast.args)
-
+        #print("==========end====================",out_t.annotate(p))
+        # if isinstance(p,MeExpr):
+        #         print("=========MeExpr=========out_t.annotate=========")
         ast.annotated_type = out_t.annotate(p)
 
     def handle_homomorphic_builtin_function_call(self, ast: FunctionCallExpr, func: BuiltinFunction):
@@ -236,6 +255,7 @@ class TypeCheckVisitor(AstVisitor):
 
         ast.annotated_type = homomorphic_func.output_type()
         func.homomorphism = ast.annotated_type.homomorphism
+        # print("=handle_homomorphic_builtin_function_call=============",func.homomorphism )
         expected_arg_types = homomorphic_func.input_types()
 
         # Check that the argument types are correct
@@ -285,13 +305,16 @@ class TypeCheckVisitor(AstVisitor):
             # rhs is a valid ReclassifyExpr, i.e. the argument is public or @me-private
             # To create an expression with the correct homomorphism,
             # just change the ReclassifyExpr's output homomorphism
+            # print("===try_rehom====rhs.homomorphism====before=======",rhs.homomorphism )
             rhs.homomorphism = expected_type.homomorphism
+            # print("===try_rehom====rhs.homomorphism===========",rhs.homomorphism )
         elif isinstance(rhs, PrimitiveCastExpr):
             # Ignore primitive cast & recurse
             rhs.expr = TypeCheckVisitor.try_rehom(rhs.expr, expected_type)
         elif isinstance(rhs, FunctionCallExpr) and isinstance(rhs.func, BuiltinFunction) and rhs.func.is_ite() \
                 and rhs.args[0].annotated_type.is_public():
             # Argument is public_cond ? true_val : false_val. Try to rehom both true_val and false_val
+            # print("args=======try_rehom======",expected_type)
             rhs.args[1] = TypeCheckVisitor.try_rehom(rhs.args[1], expected_type)
             rhs.args[2] = TypeCheckVisitor.try_rehom(rhs.args[2], expected_type)
         else:
@@ -324,10 +347,13 @@ class TypeCheckVisitor(AstVisitor):
         assert (privacy.privacy_annotation_label() is not None)
 
         pl = get_privacy_expr_from_label(privacy.privacy_annotation_label())
+        # print("====make_private==================",homomorphism)
         r = ReclassifyExpr(expr, pl, homomorphism)
-
+        #print("====make_private==================",AnnotatedTypeName(expr.annotated_type.type_name, pl.clone(), homomorphism))
         # set type
         r.annotated_type = AnnotatedTypeName(expr.annotated_type.type_name, pl.clone(), homomorphism)
+        # if isinstance(pl,MeExpr):
+        #     print("==========MeExpr========make_private=====")
         TypeCheckVisitor.check_for_invalid_private_type(r)
 
         # set statement, parents, location
@@ -338,6 +364,7 @@ class TypeCheckVisitor(AstVisitor):
     @staticmethod
     def assign_location(target: Expression, source: Expression):
         # set statement
+        # print("=====assign_location======================",type(source.statement),source.statement)
         target.statement = source.statement
 
         # set parents
@@ -351,7 +378,11 @@ class TypeCheckVisitor(AstVisitor):
 
     @staticmethod
     def implicitly_converted_to(expr: Expression, t: TypeName) -> Expression:
+        # print("================implicitly_converted_to=======begin========",expr,type(expr))
+        # if isinstance(expr.annotated_type.privacy_annotation,MeExpr):
+        #     print("=======$$$$$$$$$$$$$$$$$$========MeExpr====begin======implicitly_converted_to======")
         if isinstance(expr, ReclassifyExpr) and not expr.privacy.is_all_expr():
+            # print("================implicitly_converted_to%%%%%%%%%%%%%%%%%%%%%%%%ReclassifyExpr========",expr)
             # Cast the argument of the ReclassifyExpr instead
             expr.expr = TypeCheckVisitor.implicitly_converted_to(expr.expr, t)
             expr.annotated_type.type_name = expr.expr.annotated_type.type_name
@@ -360,8 +391,17 @@ class TypeCheckVisitor(AstVisitor):
         assert expr.annotated_type.type_name.is_primitive_type()
         cast = PrimitiveCastExpr(t.clone(), expr, is_implicit=True).override(
             parent=expr.parent, statement=expr.statement, line=expr.line, column=expr.column)
+        # print("==***************===implicitly_converted_to======in========",expr,expr.annotated_type.privacy_annotation)
         cast.elem_type.parent = cast
         expr.parent = cast
+        #print("===implicitly_converted_to================",AnnotatedTypeName(t.clone(),
+                                                # expr.annotated_type.privacy_annotation.clone(),
+                     # expr.annotated_type.homomorphism).override(parent=cast))
+        # if isinstance(expr.annotated_type.privacy_annotation,MeExpr):
+        #     print("=====!!!!!!!!!!!!!!============MeExpr==========implicitly_converted_to======",expr)
+        #     import traceback
+        #     for line in traceback.format_stack():
+        #         print(line.strip())
         cast.annotated_type = AnnotatedTypeName(t.clone(),
                                                 expr.annotated_type.privacy_annotation.clone(),
                                                 expr.annotated_type.homomorphism).override(parent=cast)
@@ -400,6 +440,7 @@ class TypeCheckVisitor(AstVisitor):
     def handle_cast(self, expr: Expression, t: TypeName) -> AnnotatedTypeName:
         # because of the fake solidity check we already know that the cast is possible -> don't have to check if cast possible
         if expr.annotated_type.is_private():
+            # print("==============MeExpr=============handle_cast======")
             expected = AnnotatedTypeName(expr.annotated_type.type_name, Expression.me_expr())
             if not expr.instanceof(expected):
                 raise TypeMismatchException(expected, expr.annotated_type, expr)
@@ -439,7 +480,8 @@ class TypeCheckVisitor(AstVisitor):
         # Prevent unhom(public_value)
         if is_expr_at_all and isinstance(ast, RehomExpr) and ast.homomorphism == Homomorphism.NON_HOMOMORPHIC:
             raise TypeException(f'Cannot use "{ast.homomorphism.rehom_expr_name}" on a public value', ast)
-
+        # if isinstance(ast.privacy,MeExpr):
+        #     print("============MeExpr=======visitReclassifyExpr======")
         # NB prevent any redundant reveal (not just for public)
         ast.annotated_type = AnnotatedTypeName(ast.expr.annotated_type.type_name, ast.privacy, homomorphism)
         if ast.instanceof(ast.expr.annotated_type) is True:
@@ -490,6 +532,8 @@ class TypeCheckVisitor(AstVisitor):
             target = ast.target
             if isinstance(target, ContractDefinition):
                 raise TypeException(f'Unsupported use of contract type in expression', ast)
+            # if isinstance(target.annotated_type.privacy_annotation,MeExpr):
+            #     print("======MeExpr=======visitIdentifierExpr========",target.annotated_type.privacy_annotation)
             ast.annotated_type = target.annotated_type.clone()
 
             if not self.is_accessible_by_invoker(ast):
@@ -514,6 +558,7 @@ class TypeCheckVisitor(AstVisitor):
             # record indexing information
             if map_t.type_name.key_label is not None: # TODO modification correct?
                 if index.privacy_annotation_label():
+                    # print("========instantiated_key=====update=================",map_t.type_name)
                     map_t.type_name.instantiated_key = index
                 else:
                     raise TypeException(f'Index cannot be used as a privacy type for array of type {map_t}', ast)
@@ -543,9 +588,11 @@ class TypeCheckVisitor(AstVisitor):
                     raise TypeException('Only me/all accepted as privacy type of return values for public functions', ast)
 
     def visitEnumDefinition(self, ast: EnumDefinition):
+        # print("=====visitEnumDefinition======================",str(ast),type(ast),ast)
         ast.annotated_type = AnnotatedTypeName(EnumTypeName(ast.qualified_name).override(target=ast))
 
     def visitEnumValue(self, ast: EnumValue):
+        # print("=====visitEnumValue======================",str(ast),type(ast),ast.qualified_name)
         ast.annotated_type = AnnotatedTypeName(EnumValueTypeName(ast.qualified_name).override(target=ast))
 
     def visitStateVariableDeclaration(self, ast: StateVariableDeclaration):
@@ -564,17 +611,22 @@ class TypeCheckVisitor(AstVisitor):
 
     def visitMapping(self, ast: Mapping):
         if ast.key_label is not None:
+            # print(ast.key_type.parent ,ast.key_type.target ,TypeName.address_type().parent,TypeName.address_type().target)
             if ast.key_type != TypeName.address_type():
                 raise TypeException(f'Only addresses can be annotated', ast)
 
     def visitRequireStatement(self, ast: RequireStatement):
+        #print("=====visitRequireStatement============condition================",ast.condition,type(ast.condition))
         if not ast.condition.annotated_type.privacy_annotation.is_all_expr():
             raise TypeException(f'require needs public argument', ast)
 
     def visitAnnotatedTypeName(self, ast: AnnotatedTypeName):
+        # print("====visitAnnotatedTypeName===================",ast.type_name)
         if type(ast.type_name) == UserDefinedTypeName:
+            # print("=======================",ast.type_name.target)
             if not isinstance(ast.type_name.target, EnumDefinition):
                 raise TypeException('Unsupported use of user-defined type', ast.type_name)
+            # print(ast.type_name ,"=======tn================",  ast.type_name.target.annotated_type.type_name.clone()) 
             ast.type_name = ast.type_name.target.annotated_type.type_name.clone()
 
         if ast.privacy_annotation != Expression.all_expr():

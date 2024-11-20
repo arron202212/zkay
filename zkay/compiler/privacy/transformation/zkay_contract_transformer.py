@@ -34,8 +34,9 @@ def transform_ast(ast: SourceUnit) -> Tuple[SourceUnit, Dict[ConstructorOrFuncti
              to the corresponding circuit helper instance.
     """
     zt = ZkayTransformer()
-    new_ast = zt.visit(ast)
-
+    # print("======ast===============",ast)
+    new_ast = zt.visit(ast)#priv_expr
+    # print("======new_ast===============",new_ast)
     # restore all parent pointers and identifier targets
     set_parents(new_ast)
     link_identifiers(new_ast)
@@ -214,7 +215,7 @@ class ZkayTransformer(AstTransformerVisitor):
             self.import_contract(cfg.get_pki_contract_name(crypto_params), ast)
 
         for c in ast.contracts:
-            self.transform_contract(ast, c)
+            self.transform_contract(ast, c)#priv_expr
 
         return ast
 
@@ -281,12 +282,20 @@ class ZkayTransformer(AstTransformerVisitor):
             f.parameters = self.var_decl_trafo.visit_list(f.parameters)
         for f in c.function_definitions:
             f.return_parameters = self.var_decl_trafo.visit_list(f.return_parameters)
+            # for r in f.return_var_decls:
+            #     print("===be====return_var_decls======",r)
             f.return_var_decls = self.var_decl_trafo.visit_list(f.return_var_decls)
+            # for r in f.return_var_decls:
+            #     print("=======return_var_decls======",r)
 
         # Transform bodies
         for fct in all_fcts:
             gen = self.circuits.get(fct, None)
-            fct.body = ZkayStatementTransformer(gen).visit(fct.body)
+            # for s in fct.body.statements:
+            #     print("=======s=======",s)
+            fct.body = ZkayStatementTransformer(gen).visit(fct.body)#priv_expr
+            # for s in fct.body.statements:
+            #     print("==after=====s=======",s)
 
         # Transform (internal) functions which require verification (add the necessary additional parameters and boilerplate code)
         fcts_with_verification = [fct for fct in all_fcts if fct.requires_verification]
@@ -297,6 +306,7 @@ class ZkayTransformer(AstTransformerVisitor):
             assert circuit.requires_verification()
             if circuit.requires_zk_data_struct():
                 # Add zk data struct for f to contract
+                # print("=======circuit.zk_data_struct_name============================",circuit.zk_data_struct_name)
                 zk_data_struct = StructDefinition(Identifier(circuit.zk_data_struct_name), [
                     VariableDeclaration([], AnnotatedTypeName(idf.t), idf.clone(), '')
                     for idf in circuit.output_idfs + circuit.input_idfs
@@ -345,6 +355,7 @@ class ZkayTransformer(AstTransformerVisitor):
 
         # Declare zk_data struct var (if needed)
         if circuit.requires_zk_data_struct():
+            # print("====circuit.zk_data_struct_name==================",circuit.zk_data_struct_name)
             zk_struct_type = StructTypeName([Identifier(circuit.zk_data_struct_name)])
             stmts += [Identifier(cfg.zk_data_var_name).decl_var(zk_struct_type), BlankLine()]
 
@@ -365,7 +376,9 @@ class ZkayTransformer(AstTransformerVisitor):
         deserialize_stmts = []
         offset = 0
         for s in circuit.output_idfs:
-            deserialize_stmts.append(s.deserialize(cfg.zk_out_name, out_start_idx, offset))
+            sd=s.deserialize(cfg.zk_out_name, out_start_idx, offset)
+            # print("=======deserialize============",sd)
+            deserialize_stmts.append(sd)
             if isinstance(s.t, CipherText) and s.t.crypto_params.is_symmetric_cipher():
                 # Assign sender field to user-encrypted values if necessary
                 # Assumption: s.t.crypto_params.key_len == 1 for all symmetric ciphers
@@ -373,14 +386,18 @@ class ZkayTransformer(AstTransformerVisitor):
                 key_idx = me_key_idx[s.t.crypto_params]
                 sender_key = in_var.index(key_idx)
                 cipher_payload_len = s.t.crypto_params.cipher_payload_len
+                # print("=======deserialize==1==========",s.get_loc_expr().index(cipher_payload_len).assign(sender_key))
                 deserialize_stmts.append(s.get_loc_expr().index(cipher_payload_len).assign(sender_key))
             offset += s.t.size_in_uints
         if deserialize_stmts:
             stmts.append(StatementList(Comment.comment_wrap_block("Deserialize output values", deserialize_stmts), excluded_from_simulation=True))
 
         # Include original transformed function body
+        # for s in ast.body.statements:
+        #     print("=======s=======",s)
         stmts += ast.body.statements
 
+        # print("==input_idfs===len===========",len(circuit.input_idfs))
         # Serialize in parameters to in array (if any)
         serialize_stmts = []
         offset = 0
@@ -532,9 +549,11 @@ class ZkayTransformer(AstTransformerVisitor):
         copy_stmts = []
         for p in original_params:
             if p.annotated_type.is_cipher():
+                # print("==========p.annotated_type.is_cipher()========")
                 c = p.annotated_type.type_name
                 assert isinstance(c, CipherText)
                 if c.crypto_params.is_symmetric_cipher():
+                    # print("==========p.annotated_type.is_symmetric_cipher()========")
                     sender_key = in_arr_var.index(me_key_idx[c.crypto_params])
                     idf = IdentifierExpr(p.idf.clone()).as_type(p.annotated_type.clone())
                     cipher_payload_len = cfg.get_crypto_params(p.annotated_type.homomorphism).cipher_payload_len
@@ -553,14 +572,16 @@ class ZkayTransformer(AstTransformerVisitor):
 
         # Call internal function
         args = [IdentifierExpr(param.idf.clone()) for param in original_params]
+        # print("=-===len(args)=======",len(args))
         internal_call = FunctionCallExpr(IdentifierExpr(int_fct.idf.clone()).override(target=int_fct), args)
         internal_call.sec_start_offset = ext_circuit.priv_in_size
-
+        # print("=-==internal_call=len(args)=======",len(internal_call.args))
         if int_fct.requires_verification:
             ext_circuit.call_function(internal_call)
             args += [in_arr_var.clone(), NumberLiteralExpr(ext_circuit.in_size),
                      IdentifierExpr(cfg.zk_out_name), NumberLiteralExpr(ext_circuit.out_size)]
-
+        # print("=-===len(args)===2222====",len(args))
+        # print("=-===len(internal_call.args)===2222====",len(internal_call.args))
         if int_fct.return_parameters:
             stmts += Comment.comment_list("Declare return variables", [VariableDeclarationStatement(deep_copy(vd)) for vd in int_fct.return_var_decls])
             in_call = TupleExpr([IdentifierExpr(vd.idf.clone()) for vd in int_fct.return_var_decls]).assign(internal_call)
@@ -572,6 +593,7 @@ class ZkayTransformer(AstTransformerVisitor):
 
         # Call verifier
         if requires_proof and not cfg.disable_verification:
+            # print("===========requires_proof and not cfg.disable_verification========================")
             verifier = IdentifierExpr(cfg.get_contract_var_name(ext_circuit.verifier_contract_type.code()))
             verifier_args = [IdentifierExpr(cfg.proof_param_name), IdentifierExpr(cfg.zk_in_name), IdentifierExpr(cfg.zk_out_name)]
             verify = ExpressionStatement(verifier.call(cfg.verification_function_name, verifier_args))

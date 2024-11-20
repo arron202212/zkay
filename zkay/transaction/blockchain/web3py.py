@@ -29,9 +29,16 @@ class Web3Blockchain(ZkayBlockchainInterface):
     def __init__(self) -> None:
         super().__init__()
         self.w3 = self._create_w3_instance()
-        if not self.w3.isConnected():
-            raise BlockChainError(f'Failed to connect to blockchain: {self.w3.provider}')
-
+        try:
+            if not self.w3.is_connected():
+                raise BlockChainError(f'Failed to connect to blockchain: {self.w3.provider}')
+        except:
+            pass
+        try:
+            if not self.w3.isConnected():
+                raise BlockChainError(f'Failed to connect to blockchain: {self.w3.provider}')
+        except:
+            pass
     @staticmethod
     def compile_contract(sol_filename: str, contract_name: str, libs: Optional[Dict] = None, cwd=None):
         solp = Path(sol_filename)
@@ -48,11 +55,11 @@ class Web3Blockchain(ZkayBlockchainInterface):
         return str(contract.address)
 
     def get_special_variables(self, sender: AddressValue, wei_amount: int = 0) -> Tuple[MsgStruct, BlockStruct, TxStruct]:
-        block = self.w3.eth.getBlock('pending')
+        block = self.w3.eth.get_block('pending')
         zk_print(f'Current block timestamp: {block["timestamp"]}')
         return MsgStruct(sender, wei_amount), \
                BlockStruct(AddressValue(self.w3.eth.coinbase), block['difficulty'], block['gasLimit'], block['number'], block['timestamp']),\
-               TxStruct(self.w3.eth.gasPrice, sender)
+               TxStruct(self.w3.eth.gas_price, sender)
 
     @abstractmethod
     def _create_w3_instance(self) -> Web3:
@@ -67,7 +74,7 @@ class Web3Blockchain(ZkayBlockchainInterface):
             return cfg.blockchain_default_account
 
     def _get_balance(self, address: Union[bytes, str]) -> int:
-        return self.w3.eth.getBalance(address)
+        return self.w3.eth.get_balance(address)
 
     def _req_public_key(self, address: Union[bytes, str], crypto_params: CryptoParams) -> PublicKeyValue:
         return PublicKeyValue(self._req_state_var(self.pki_contract(crypto_params.crypto_name), 'getPk', address),
@@ -95,12 +102,15 @@ class Web3Blockchain(ZkayBlockchainInterface):
     def _transact(self, contract_handle, sender: Union[bytes, str], function: str, *actual_params, wei_amount: Optional[int] = None) -> Any:
         try:
             fct = contract_handle.constructor if function == 'constructor' else contract_handle.functions[function]
+            print("=====*actual_params================",*actual_params)
             gas_amount = self._gas_heuristic(sender, fct(*actual_params))
+            print("=====*actual_params=======1=========",*actual_params)
             tx = {'from': sender, 'gas': gas_amount}
             if wei_amount:
                 tx['value'] = wei_amount
             tx_hash = fct(*actual_params).transact(tx)
-            tx_receipt = self.w3.eth.waitForTransactionReceipt(tx_hash)
+            print("=====*actual_params=======1==2=======",*actual_params)
+            tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
         except Exception as e:
             raise BlockChainError(e.args)
 
@@ -114,14 +124,19 @@ class Web3Blockchain(ZkayBlockchainInterface):
     def _deploy(self, project_dir: str, sender: Union[bytes, str], contract: str, *actual_args, wei_amount: Optional[int] = None) -> Any:
         with open(os.path.join(project_dir, 'contract.zkay')) as f:
             verifier_names = get_verification_contract_names(f.read())
-
+        print("======_deploy======be=======")
         # Deploy verification contracts if not already done
         external_contract_addresses =  self._deploy_dependencies(sender, project_dir, verifier_names)
+        print("======_deploy======be==1111=====")
         with self.__hardcoded_external_contracts_ctx(project_dir, external_contract_addresses) as filename:
             cout = self.compile_contract(filename, contract, cwd=project_dir)
+        print("======_deploy======e====0====")
         with log_context('constructor'):
             with log_context(f'{contract}'):
+                print("======_deploy======e===1=====")
                 handle = self._deploy_contract(sender, cout, *actual_args, wei_amount=wei_amount)
+                print("======_deploy======e====2====")
+        print("======_deploy======e========")
         zk_print(f'Deployed contract "{contract}" at address "{handle.address}"')
         return handle
 
@@ -133,11 +148,13 @@ class Web3Blockchain(ZkayBlockchainInterface):
             abi=contract_interface['abi'],
             bytecode=contract_interface['bin']
         )
-
+        print("=====*_deploy_contract================")
         tx_receipt = self._transact(contract, sender, 'constructor', *args, wei_amount=wei_amount)
+        print("=====*_deploy_contract===2========2=====")
         contract = self.w3.eth.contract(
             address=tx_receipt.contractAddress, abi=contract_interface['abi']
         )
+        print("=====*_deploy_contract===2====3====2=====")
         return contract
 
     def _deploy_dependencies(self, sender: Union[bytes, str], project_dir: str, verifier_names: List[str]) -> Dict[str, AddressValue]:
@@ -149,17 +166,24 @@ class Web3Blockchain(ZkayBlockchainInterface):
                     filename = os.path.join(project_dir, f'{verifier_name}.sol')
                     cout = self.compile_contract(filename, verifier_name, self.lib_addresses)
                     with time_measure("transaction_full"):
+                        print("=====*verifier_name=0====",verifier_name)
                         vf[verifier_name] = AddressValue(self._deploy_contract(sender, cout).address)
+                        print("=====*verifier_name=====")
+        print("=====*all_crypto_params=====")
         for crypto_params in cfg.all_crypto_params():
+            print("=====*all_crypto_params==e=1==")
             pki_contract_name = cfg.get_pki_contract_name(crypto_params)
+            print("=====*all_crypto_params==e==2=")
             pki_contract_address = self.pki_contract(crypto_params.crypto_name).address
+            print("=====*all_crypto_params==e==3=")
             vf[pki_contract_name] = AddressValue(pki_contract_address)
+        print("=====*all_crypto_params==e===")
         return vf
 
     def _connect_libraries(self):
         if not cfg.blockchain_pki_address:
             raise BlockChainError('Must specify pki address in config.')
-
+        print("=====*_connect_libraries==***************************===")
         lib_addresses = []
         if cfg.external_crypto_lib_names:
             lib_addresses = [addr.strip() for addr in cfg.blockchain_crypto_lib_addresses.split(',')] if cfg.blockchain_crypto_lib_addresses else []
@@ -169,11 +193,17 @@ class Web3Blockchain(ZkayBlockchainInterface):
 
         with cfg.library_compilation_environment():
             with tempfile.TemporaryDirectory() as tmpdir:
+                pki_addresses = [addr.strip() for addr in cfg.blockchain_pki_address.split(',')] if cfg.blockchain_pki_address else []
+                i=0
+                _pki_contract={}
                 for crypto_params in cfg.all_crypto_params():
                     contract_name = cfg.get_pki_contract_name(crypto_params)
                     pki_sol = save_to_file(tmpdir, f'{contract_name}.sol', library_contracts.get_pki_contract(crypto_params))
-                    self._pki_contract = self._verify_contract_integrity(cfg.blockchain_pki_address, pki_sol, contract_name=contract_name)
-
+                    backend_name=crypto_params.crypto_name
+                    print("===crypto_params===========",backend_name)
+                    _pki_contract[backend_name] = self._verify_contract_integrity(pki_addresses[i], pki_sol, contract_name=contract_name)
+                    i+=1
+                self._pki_contract=_pki_contract
                 verify_sol = save_to_file(tmpdir, 'verify_libs.sol', library_contracts.get_verify_libs_code())
                 self._lib_addresses = {}
                 for lib, addr in zip(cfg.external_crypto_lib_names, lib_addresses):
@@ -195,7 +225,7 @@ class Web3Blockchain(ZkayBlockchainInterface):
 
         if contract_name is None:
             contract_name = get_contract_names(sol_filename)[0]
-        actual_byte_code = self.__normalized_hex(self.w3.eth.getCode(address))
+        actual_byte_code = self.__normalized_hex(self.w3.eth.get_code(address))
         if not actual_byte_code:
             raise IntegrityError(f'Expected contract {contract_name} is not deployed at address {address}')
 
@@ -250,6 +280,7 @@ class Web3Blockchain(ZkayBlockchainInterface):
         with open(os.path.join(contract_dir, 'contract.sol')) as f:
             c = f.read()
         for key, val in pki_verifier_addresses.items():
+            print("====key val=====================",key,self.w3.toChecksumAddress(val.val))
             c = c.replace(f'{key}(0)', f'{key}({self.w3.toChecksumAddress(val.val)})')
 
         with tempfile.TemporaryDirectory() as tempd:
@@ -267,7 +298,7 @@ class Web3Blockchain(ZkayBlockchainInterface):
         return val.lower()
 
     def _gas_heuristic(self, sender, tx) -> int:
-        limit = self.w3.eth.getBlock('latest')['gasLimit']
+        limit = self.w3.eth.get_block('latest')['gasLimit']
         estimate = tx.estimateGas({'from': sender, 'gas': limit})
         return min(int(estimate * 1.2), limit)
 
@@ -284,7 +315,7 @@ class Web3TesterBlockchain(Web3Blockchain):
 
     def _connect_libraries(self):
         zk_print_banner(f'Deploying Libraries')
-
+        print("======*********************=====_connect_libraries=============")
         sender = self.w3.eth.accounts[0]
         # Since eth-tester is not persistent -> always automatically deploy libraries
         with cfg.library_compilation_environment():
@@ -364,7 +395,7 @@ class Web3HttpGanacheBlockchain(Web3HttpBlockchain):
         return dummy_accounts
 
     def _gas_heuristic(self, sender, tx) -> int:
-        return self.w3.eth.getBlock('latest')['gasLimit']
+        return self.w3.eth.get_block('latest')['gasLimit']
 
 
 class Web3CustomBlockchain(Web3Blockchain):

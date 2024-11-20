@@ -18,10 +18,13 @@ def run_command(cmd: List[str], cwd=None, allow_verbose: bool = False) -> Tuple[
     if cwd is not None:
         cwd = os.path.abspath(cwd)
 
+    cmd1 = get_command(cmd)
+    print("====cmd=================",cmd1)
     if allow_verbose and cfg.verbosity >= 2 and not cfg.is_unit_test:
         process = subprocess.Popen(cmd, cwd=cwd)
         output, error = process.communicate() # will be None
     else:
+
         # run
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
 
@@ -31,7 +34,7 @@ def run_command(cmd: List[str], cwd=None, allow_verbose: bool = False) -> Tuple[
         # decode output
         output = output.decode('utf-8').rstrip()
         error = error.decode('utf-8').rstrip()
-
+ 
     # check for error
     if process.returncode != 0:
         cmd = get_command(cmd)

@@ -20,7 +20,7 @@ from zkay.zkay_ast.ast import ReclassifyExpr, Expression, IfStatement, Statement
     BooleanLiteralType, NumberLiteralType, BooleanLiteralExpr, PrimitiveCastExpr, EnumDefinition, EncryptionExpression, \
     TypeName
 from zkay.zkay_ast.visitor.deep_copy import replace_expr
-
+import inspect
 
 class ZkayVarDeclTransformer(AstTransformerVisitor):
     """
@@ -31,20 +31,26 @@ class ZkayVarDeclTransformer(AstTransformerVisitor):
     """
 
     def __init__(self):
-        super().__init__()
+        super().__init__(is_trans=False)
         self.expr_trafo = ZkayExpressionTransformer(None)
 
     def visitAnnotatedTypeName(self, ast: AnnotatedTypeName):
         if ast.is_private():
+            # print("======MeExpr===========visitAnnotatedTypeName======")
             t = TypeName.cipher_type(ast, ast.homomorphism)
         else:
+            # print("=======else========",type(ast.type_name))
             t = self.visit(ast.type_name.clone())
+        # print("==========tt======================",type(ast.type_name),type(t))
         return AnnotatedTypeName(t)
 
     def visitVariableDeclaration(self, ast: VariableDeclaration):
         if ast.annotated_type.is_private():
+            # print("======visitVariableDeclaration======is_private========",ast)
             ast.storage_location = 'memory'
-        return self.visit_children(ast)
+        a=self.visit_children(ast)
+        # print("======visitVariableDeclaration==============",a)
+        return a
 
     def visitParameter(self, ast: Parameter):
         ast = self.visit_children(ast)
@@ -56,11 +62,13 @@ class ZkayVarDeclTransformer(AstTransformerVisitor):
         ast.keywords = [k for k in ast.keywords if k != 'public']
         # make sure every state var gets a public getter (required for simulation)
         ast.keywords.append('public')
+        # print("======visitStateVariableDeclaration=========================",ast.expr)
         ast.expr = self.expr_trafo.visit(ast.expr)
         return self.visit_children(ast)
 
     def visitMapping(self, ast: Mapping):
         if ast.key_label is not None:
+            # print("======visitMapping=====ast.key_label=====vardec=========",ast.key_label)
             ast.key_label = ast.key_label.name
         return self.visit_children(ast)
 
@@ -87,9 +95,12 @@ class ZkayStatementTransformer(AstTransformerVisitor):
         the statement is wrapped in a comment block which displays the original statement's code.
         """
         new_statements = []
+        # for s in ast.statements:
+        #         print("=======s=======",type(s))
         for idx, stmt in enumerate(ast.statements):
             old_code = stmt.code()
-            transformed_stmt = self.visit(stmt)
+            transformed_stmt = self.visit(stmt)#priv_expr
+            # print("===transformed_stmt==============",old_code,"====transformed_stmt======",transformed_stmt)
             if transformed_stmt is None:
                 continue
 
@@ -99,20 +110,31 @@ class ZkayStatementTransformer(AstTransformerVisitor):
             if old_code_wo_annotations == new_code_wo_annotation_comments:
                 new_statements.append(transformed_stmt)
             else:
+                # for ps in  transformed_stmt.pre_statements:
+                #     try:
+                #         print("===transformed_stmt======pre_statements========",ps)
+                #     except Exception as e: 
+                #         pass
                 new_statements += Comment.comment_wrap_block(old_code, transformed_stmt.pre_statements + [transformed_stmt])
 
         if new_statements and isinstance(new_statements[-1], BlankLine):
             new_statements = new_statements[:-1]
+        # for s in new_statements:
+        #         print("===new====s=======",type(s))
         ast.statements = new_statements
         return ast
 
     def process_statement_child(self, child: AST):
         """Default statement child handling. Expressions and declarations are visited by the corresponding transformers."""
         if isinstance(child, Expression):
-            return self.expr_trafo.visit(child)
+            c=self.expr_trafo.visit(child)
+            # print("===========c========",c)
+            return c
         elif child is not None:
             assert isinstance(child, VariableDeclaration)
-            return self.var_decl_trafo.visit(child)
+            v=self.var_decl_trafo.visit(child)
+            # print("===========v========",v)
+            return v
 
     def visitStatement(self, ast: Statement):
         """
@@ -122,12 +144,15 @@ class ZkayStatementTransformer(AstTransformerVisitor):
         """
         assert isinstance(ast, SimpleStatement) or isinstance(ast, VariableDeclarationStatement)
         ast.process_children(self.process_statement_child)
+        # print("========visitStatement====%%%%%%%%%%%%%%%%%%%%%%%=================",ast)
         return ast
 
     def visitAssignmentStatement(self, ast: AssignmentStatement):
+        # print("====visitAssignmentStatement====st=========",ast)
         """Rule (2)"""
         ast.lhs = self.expr_trafo.visit(ast.lhs)
-        ast.rhs = self.expr_trafo.visit(ast.rhs)
+        ast.rhs = self.expr_trafo.visit(ast.rhs)#priv_expr
+        # print("=visitAssignmentStatement===============",ast.lhs,"=======",ast.rhs)
         modvals = list(ast.modified_values.keys())
         if cfg.opt_cache_circuit_outputs and isinstance(ast.lhs, IdentifierExpr) and isinstance(ast.rhs, MemberAccessExpr):
             # Skip invalidation if rhs is circuit output
@@ -145,6 +170,7 @@ class ZkayStatementTransformer(AstTransformerVisitor):
             for val in modvals:
                 if val.key is None:
                     self.gen.invalidate_idf(val.target.idf)
+        # print("=visitAssignmentStatement========ret=======",ast.lhs,"=======",ast.rhs)
         return ast
 
     def visitIfStatement(self, ast: IfStatement):
@@ -161,6 +187,7 @@ class ZkayStatementTransformer(AstTransformerVisitor):
         if ast.condition.annotated_type.is_public():
             if contains_private_expr(ast.then_branch) or contains_private_expr(ast.else_branch):
                 before_if_state = self.gen._remapper.get_state()
+                print("=======add_to_circuit_inputs=======condition=====",ast.condition)
                 guard_var = self.gen.add_to_circuit_inputs(ast.condition)
                 ast.condition = guard_var.get_loc_expr(ast)
                 with self.gen.guarded(guard_var, True):
@@ -182,6 +209,7 @@ class ZkayStatementTransformer(AstTransformerVisitor):
                     ast.else_branch = self.visit(ast.else_branch)
             return ast
         else:
+            # print("=======evaluate_stmt_in_circuit=============",ast)
             return self.gen.evaluate_stmt_in_circuit(ast)
 
     def visitWhileStatement(self, ast: WhileStatement):
@@ -225,9 +253,14 @@ class ZkayStatementTransformer(AstTransformerVisitor):
                 return None
             assert not self.gen.has_return_var
             self.gen.has_return_var = True
+            # print("=====visitReturnStatement====ast===expr===========",type(ast.expr))
             expr = self.expr_trafo.visit(ast.expr)
+            # print("=====visitReturnStatement=======expr===========",type(expr),expr)
             ret_args = [IdentifierExpr(vd.idf.clone()).override(target=vd) for vd in ast.function.return_var_decls]
-            return TupleExpr(ret_args).assign(expr).override(pre_statements=ast.pre_statements)
+            
+            ret = TupleExpr(ret_args).assign(expr).override(pre_statements=ast.pre_statements)
+            # print("=====visitReturnStatement==================",ret)
+            return ret
         else:
             ast.expr = self.expr_trafo.visit(ast.expr)
             return ast
@@ -271,7 +304,13 @@ class ZkayExpressionTransformer(AstTransformerVisitor):
         return self.visit_children(ast)
 
     def visitTupleExpr(self, ast: TupleExpr):
+        # ret=ast
+        # if ast is not None:
+            # for e in ast.elements:
+            #     print("==elements====type=======",ast,type(e))
         return self.visit_children(ast)
+            # print("====visitTupleExpr=============",ret)
+        # return ret
 
     def visitReclassifyExpr(self, ast: ReclassifyExpr):
         """
@@ -279,13 +318,19 @@ class ZkayExpressionTransformer(AstTransformerVisitor):
 
         The reclassified expression is evaluated in the circuit and its result is made available in solidity.
         """
-        return self.gen.evaluate_expr_in_circuit(ast.expr, ast.privacy.privacy_annotation_label(), ast.annotated_type.homomorphism)
+        # print("====res===$$$$$$$$$$$$$$$$$$$$$$$$$$$$$===before===",ast.expr,type(ast.expr))
+        res=self.gen.evaluate_expr_in_circuit(ast.expr, ast.privacy.privacy_annotation_label(), ast.annotated_type.homomorphism)#priv_expr
+        # print(res,"====res===$$$$$$$$$$$$$$$$$$$$$$$$$$$$$===after===",ast.expr,type(ast.expr))
+        # print(f"=evaluate_expr_in_circuit=ZkayExpressionTransformer=visitReclassifyExpr==={ast.expr}={type(ast.expr)}====={type(ast)}===={ast}===")
+        return res
 
     def visitBuiltinFunction(self, ast: BuiltinFunction):
         return ast
 
     def visitFunctionCallExpr(self, ast: FunctionCallExpr):
+        # print("=====visitFunctionCallExpr======================",ast)
         if isinstance(ast.func, BuiltinFunction):
+            # print("=====visitFunctionCallExpr==========1============",ast)
             if ast.func.is_private:
                 """
                 Modified Rule (12) builtin functions with private operands and homomorphic operations on ciphertexts
@@ -294,8 +339,12 @@ class ZkayExpressionTransformer(AstTransformerVisitor):
                 A private expression on its own (like an IdentifierExpr referring to a private variable) is not enough to trigger a
                 boundary crossing (assignment of private variables is a public operation).
                 """
+                # print(f"===visitFunctionCallExpr==1==2======")
                 privacy_label = ast.annotated_type.privacy_annotation.privacy_annotation_label()
-                return self.gen.evaluate_expr_in_circuit(ast, privacy_label, ast.func.homomorphism)
+                # print(f"===visitFunctionCallExpr==1==2===privacy_label===",privacy_label)
+                r= self.gen.evaluate_expr_in_circuit(ast, privacy_label, ast.func.homomorphism)
+                # print(f"===visitFunctionCallExpr==1==2===r===",r)
+                return r
             else:
                 """
                 Rule (10) with additional short-circuit handling.
@@ -305,8 +354,10 @@ class ZkayExpressionTransformer(AstTransformerVisitor):
                 nested private expressions.
                 """
                 # handle short-circuiting
+                # print(f"===visitFunctionCallExpr==1==3======")
                 if ast.func.has_shortcircuiting() and any(map(contains_private_expr, ast.args[1:])):
                     op = ast.func.op
+                    print("==========add_to_circuit_inputs======ast.args[0]==",ast.args[0])
                     guard_var = self.gen.add_to_circuit_inputs(ast.args[0])
                     ast.args[0] = guard_var.get_loc_expr(ast)
                     if op == 'ite':
@@ -320,14 +371,17 @@ class ZkayExpressionTransformer(AstTransformerVisitor):
 
                 return self.visit_children(ast)
         elif ast.is_cast:
+            # print("=====visitFunctionCallExpr===========2===========",ast)
             """Casts are handled either in public or inside the circuit depending on the privacy of the casted expression."""
             assert isinstance(ast.func.target, EnumDefinition)
             if ast.args[0].evaluate_privately:
                 privacy_label = ast.annotated_type.privacy_annotation.privacy_annotation_label()
+                # print(f"==evaluate_expr_in_circuit==3==(ast)==(type(ast))======={inspect.currentframe().f_lineno}===")
                 return self.gen.evaluate_expr_in_circuit(ast, privacy_label, ast.annotated_type.homomorphism)
             else:
                 return self.visit_children(ast)
         else:
+            # print("=====visitFunctionCallExpr=========3=============",ast)
             """
             Handle normal function calls (outside private expression case).
 
@@ -376,9 +430,13 @@ class ZkayExpressionTransformer(AstTransformerVisitor):
         """Casts are handled either in public or inside the circuit depending on the privacy of the casted expression."""
         if ast.evaluate_privately:
             privacy_label = ast.annotated_type.privacy_annotation.privacy_annotation_label()
+            # print(f"===evaluate_expr_in_circuit===4===={ast}=={type(ast)}==={inspect.currentframe().f_lineno}===")
             return self.gen.evaluate_expr_in_circuit(ast, privacy_label, ast.annotated_type.homomorphism)
         else:
-            return self.visit_children(ast)
+            # print("======visitPrimitiveCastExpr==========before=========",ast,type(ast))
+            r= self.visit_children(ast)#priv_expr
+            # print(r,type(r),"======visitPrimitiveCastExpr==========after=========",ast,type(ast))
+            return r
 
     def visitExpression(self, ast: Expression):
         raise NotImplementedError()
@@ -402,40 +460,57 @@ class ZkayCircuitTransformer(AstTransformerVisitor):
         return ast
 
     def visitIndexExpr(self, ast: IndexExpr):
+        # print("==visitIndexExpr==========transform_location===========")
         return self.transform_location(ast)
 
     def visitIdentifierExpr(self, ast: IdentifierExpr):
+        # print("==visitIdentifierExpr===zt=======begin===========",ast,type(ast),type(ast.idf))
         if not isinstance(ast.idf, HybridArgumentIdf):
             # If ast is not already transformed, get current SSA version
+            # print("==visitIdentifierExpr===zt=======not isinstance(ast.idf, HybridArgumentIdf)===========",ast,type(ast))
             ast = self.gen.get_remapped_idf_expr(ast)
+            # print("==visitIdentifierExpr===zt=======!===========",ast,type(ast),type(ast.idf))
         if isinstance(ast, IdentifierExpr) and isinstance(ast.idf, HybridArgumentIdf):
             # The current version of ast.idf is already in the circuit
             assert ast.idf.arg_type != HybridArgType.PUB_CONTRACT_VAL
+            # print("==visitIdentifierExpr===zt==isinstance(ast, IdentifierExpr) and isinstance(ast.idf, HybridArgumentIdf)================",ast,type(ast))
             return ast
         else:
             # ast is not yet in the circuit -> move it in
+            # print("==visitIdentifierExpr==========transform_location===========",ast,type(ast))
             return self.transform_location(ast)
 
     def transform_location(self, loc: LocationExpr):
         """Rule (14), move location into the circuit."""
-        return self.gen.add_to_circuit_inputs(loc).get_idf_expr()
+        r=self.gen.add_to_circuit_inputs(loc).get_idf_expr()
+        # print("=====transform_location=============loc======",r,type(r))
+        return r
 
     def visitReclassifyExpr(self, ast: ReclassifyExpr):
+        # print("===visitReclassifyExpr=====beg====",ast,ast.expr,type(ast.expr),type(ast))
         """Rule (15), boundary crossing if analysis determined that it is """
         if ast.annotated_type.is_cipher():
             # We need a homomorphic ciphertext -> make sure the correct encryption of the value is available
             orig_type = ast.annotated_type.zkay_type
             orig_privacy = orig_type.privacy_annotation.privacy_annotation_label()
             orig_homomorphism = orig_type.homomorphism
+            # print(f"==evaluate_expr_in_circuit====5===={type(ast.expr)}===*=={ast.expr}=*=={type(ast)}===*==={ast}==*=={type(ast.annotated_type.type_name)}====")
             return self.gen.evaluate_expr_in_circuit(ast.expr, orig_privacy, orig_homomorphism)
         elif ast.expr.evaluate_privately:
-            return self.visit(ast.expr)
+            r=self.visit(ast.expr)
+            # print("========1========2=========",ast,ast.expr,type(ast.expr),r,type(r))
+            return r
         else:
             assert ast.expr.annotated_type.is_public()
+            # print("===visitReclassifyExpr==add_to_circuit_inputs===ast===expr=====",ast,ast.expr,type(ast))
             return self.gen.add_to_circuit_inputs(ast.expr).get_idf_expr()
 
     def visitExpression(self, ast: Expression):
         """Rule (16), other expressions don't need special treatment."""
+        # try:
+        #     print("==zct==visitExpression====************==========",ast,type(ast))
+        # except:
+        #     pass
         return self.visit_children(ast)
 
     def visitFunctionCallExpr(self, ast: FunctionCallExpr):
@@ -446,8 +521,9 @@ class ZkayCircuitTransformer(AstTransformerVisitor):
             return replace_expr(ast, BooleanLiteralExpr(t.value))
         elif isinstance(t, NumberLiteralType):
             return replace_expr(ast, NumberLiteralExpr(t.value))
-
+        # print("==BuiltinFunction============",type(ast),type(ast.func))
         if isinstance(ast.func, BuiltinFunction):
+            # print("=BuiltinFunction======in=======",type(ast),type(ast.func))
             if ast.func.homomorphism != Homomorphism.NON_HOMOMORPHIC:
                 # To perform homomorphic operations, we require the recipient's public key
                 crypto_params = cfg.get_crypto_params(ast.func.homomorphism)
@@ -460,9 +536,11 @@ class ZkayCircuitTransformer(AstTransformerVisitor):
                     new_args = []
                     for arg in ast.args:
                         if isinstance(arg, ReclassifyExpr):
+                            # print("==###################=======*******=========")
                             arg = arg.expr
                             ast.func.rerand_using = self.gen.get_randomness_for_rerand(ast)  # result requires re-randomization
                         elif arg.annotated_type.is_private():
+                            # print("=======is_private==========cipher_type====================")
                             arg.annotated_type = AnnotatedTypeName.cipher_type(arg.annotated_type,
                                                                                ast.func.homomorphism)
                         new_args.append(arg)
@@ -471,10 +549,14 @@ class ZkayCircuitTransformer(AstTransformerVisitor):
                     # We require all non-public arguments to be present as ciphertexts
                     for arg in ast.args:
                         if arg.annotated_type.is_private():
+                            # print("=is_private=========2==========cipher_type=======",arg)
                             arg.annotated_type = AnnotatedTypeName.cipher_type(arg.annotated_type, ast.func.homomorphism)
 
             # Builtin functions are supported natively by the circuit
-            return self.visit_children(ast)
+            # print("=visitFunctionCallExpr=====visit_children===============",ast,type(ast))
+            r=self.visit_children(ast)
+            # print("=visitFunctionCallExpr=====visit_children======ret=========",r,type(r))
+            return r
 
         fdef = ast.func.target
         assert fdef.is_function

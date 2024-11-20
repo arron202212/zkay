@@ -145,16 +145,25 @@ def replace_with_surrogate(code: str, search_pattern: Pattern, replacement_fstr:
     keep_repl_pattern = r'\g<keep>' if '(?P<keep>' in search_pattern.pattern else ''
     has_ph = '{}' in replacement_fstr
     replace_len = len(replacement_fstr) - 2
+    # if  replace_len>0:
+    #     print("========search_pattern=======",str(search_pattern))
     replacement = replacement_fstr
     search_idx = 0
     while True:
         match = re.search(search_pattern, code[search_idx:])
+        # if search_pattern==PRAGMA_PATTERN:
+        #     print("========match======",match)
         if match is None:
             return code
         if has_ph:
             replacement = replacement_fstr.format(create_surrogate_string(match.groupdict()["repl"])[replace_len:])
-
+            # print("====replacement===============",replacement)
+        # if  replace_len>0:
+        #     print("========keep_repl_pattern + replacement=======",code,keep_repl_pattern + replacement)
         code = code[:search_idx] + re.sub(search_pattern, keep_repl_pattern + replacement, code[search_idx:], count=1)
+        # if search_pattern==PRAGMA_PATTERN:
+        #     print("========end======",code,match.end())
+        
         search_idx += match.end() + 1
 
 
@@ -175,10 +184,11 @@ def fake_solidity_code(code: str):
 
     # Strip ownership annotations
     code = replace_with_surrogate(code, ATYPE_PATTERN)
-
+    # print(MAP_PATTERN,"========before===========",code)
     # Strip map key tags
     code = replace_with_surrogate(code, MAP_PATTERN)
-
+    # print("========after===========",code)
+    
     # Strip addhom / unhom expressions
     code = replace_with_surrogate(code, ADDHOM_UNHOM_PATTERN)
 
@@ -188,5 +198,5 @@ def fake_solidity_code(code: str):
     # Inject me address declaration (should be okay for type checking, maybe not for program analysis)
     # An alternative would be to replace me by msg.sender, but this would affect code length (error locations)
     code = inject_me_decls(code)
-
+    # print("======code============",code)
     return code

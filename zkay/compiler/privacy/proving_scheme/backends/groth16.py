@@ -36,7 +36,7 @@ class ProvingSchemeGroth16(ProvingScheme):
                                        prover_key_hash: bytes) -> str:
         vk = verification_key
         should_hash = cfg.should_use_hash(circuit)
-
+        # print("=======len=====",len(vk.gamma_abc),len(primary_inputs))
         query_length = len(vk.gamma_abc)
         assert query_length == len(primary_inputs) + 1
 

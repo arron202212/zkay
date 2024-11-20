@@ -41,6 +41,7 @@ class Config(UserConfig):
         if os.path.exists(filename):
             with open(filename) as conf:
                 try:
+                    # print("============conf==============")
                     self.override_defaults(json.load(conf))
                 except ValueError as e:
                     raise ValueError(f'{e} (in file "{filename}")')

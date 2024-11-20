@@ -209,12 +209,13 @@ class BuildASTVisitor(SolidityVisitor):
             pa = self.visit(ctx.privacy_annotation)
             if ctx.homomorphism is not None:
                 hom = self.visit(ctx.homomorphism)
-
+                # print("===visitAnnotatedTypeName=========",hom)
             if not (isinstance(pa, ast.AllExpr) or isinstance(pa, ast.MeExpr) or isinstance(pa, IdentifierExpr)):
                 raise SyntaxException('Privacy annotation can only be me | all | Identifier', ctx.privacy_annotation, self.code)
             if isinstance(pa, ast.AllExpr) and hom != Homomorphism.NON_HOMOMORPHIC:
                 raise SyntaxException('Public types cannot be homomorphic', ctx.homomorphism, self.code)
-
+            # if isinstance(pa, ast.MeExpr):
+            #     print("=====MeExpr==visitAnnotatedTypeName====privacy_annotation=====",pa)
         return ast.AnnotatedTypeName(self.visit(ctx.type_name), pa, hom)
 
     def visitHomomorphismAnnotation(self, ctx:SolidityParser.HomomorphismAnnotationContext):
@@ -331,10 +332,12 @@ class BuildASTVisitor(SolidityVisitor):
             if func.idf.name == 'reveal':
                 if len(args) != 2:
                     raise SyntaxException(f'Invalid number of arguments for reveal: {args}', ctx.args, self.code)
+                # print("*********************************")
                 return ReclassifyExpr(args[0], args[1], None)
             elif func.idf.name in self.rehom_expressions:
                 name = func.idf.name
                 homomorphism = self.rehom_expressions[name]
+                # print("===visitFunctionCallExpr==============",homomorphism)
                 if len(args) != 1:
                     raise SyntaxException(f'Invalid number of arguments for {name}: {args}', ctx.args, self.code)
                 return RehomExpr(args[0], homomorphism)

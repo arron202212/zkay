@@ -38,6 +38,7 @@ class DirectCanBePrivateDetector(FunctionVisitor):
             self.visit(arg)
 
     def visitLocationExpr(self, ast: LocationExpr):
+        # print("=====visitLocationExpr==================",ast,type(ast),ast.statement,type(ast.statement))
         t = ast.annotated_type.type_name
         ast.statement.function.can_be_private &= t.can_be_private()
         self.visitChildren(ast)
@@ -49,6 +50,7 @@ class DirectCanBePrivateDetector(FunctionVisitor):
         self.visitChildren(ast)
 
     def visitVariableDeclarationStatement(self, ast: AssignmentStatement):
+        # print("=====visitVariableDeclarationStatement=====================",ast)
         self.visitChildren(ast)
 
     def visitReturnStatement(self, ast: ReturnStatement):
@@ -109,6 +111,7 @@ class CircuitComplianceChecker(FunctionVisitor):
         return self.visitChildren(ast)
 
     def visitReclassifyExpr(self, ast: ReclassifyExpr):
+        # print("==ccc==2====visitReclassifyExpr=============",ast)
         if self.inside_privif_stmt and not ast.statement.before_analysis.same_partition(ast.privacy.privacy_annotation_label(), Expression.me_expr()):
             raise TypeException('Revealing information to other parties is not allowed inside private if statements', ast)
 
@@ -118,6 +121,7 @@ class CircuitComplianceChecker(FunctionVisitor):
                 self.priv_setter.set_evaluation(ast, evaluate_privately=True)
             except TypeException:
                 eval_in_public = True
+            # print("==ccc==2====should_evaluate_public_expr_in_circuit======*********=======",ast,ast.expr,eval_in_public,self.should_evaluate_public_expr_in_circuit(ast.expr))
             if eval_in_public or not self.should_evaluate_public_expr_in_circuit(ast.expr):
                 self.priv_setter.set_evaluation(ast.expr, evaluate_privately=False)
         else:
@@ -125,6 +129,7 @@ class CircuitComplianceChecker(FunctionVisitor):
         self.visit(ast.expr)
 
     def visitFunctionCallExpr(self, ast: FunctionCallExpr):
+        # print("==ccc==2====visitFunctionCallExpr=============",ast)
         if isinstance(ast.func, BuiltinFunction) and ast.func.is_private:
             self.priv_setter.set_evaluation(ast, evaluate_privately=True)
         elif ast.is_cast and ast.annotated_type.is_private():
@@ -170,6 +175,13 @@ class PrivateSetter(FunctionVisitor):
 
     def visitExpression(self, ast: Expression):
         assert self.evaluate_privately is not None
+        # if isinstance(ast,PrimitiveCastExpr):
+        #     print("==visitExpression==============",type(ast),ast,self.evaluate_privately)
+        # if not isinstance(ast,BuiltinFunction) and not self.evaluate_privately:
+            # print("==visitExpression======evaluate_privately========*******=========",type(ast),ast,self.evaluate_privately)
+            # import traceback
+            # for line in traceback.format_stack():
+            #     print(line.strip())
         ast.evaluate_privately = self.evaluate_privately
         self.visitChildren(ast)
 

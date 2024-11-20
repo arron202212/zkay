@@ -75,6 +75,7 @@ class UsedHomomorphismsVisitor(AstVisitor):
                 if f == g:
                     continue
                 old_len = len(g.used_homomorphisms)
+                # print("========used_homomorphisms===================")
                 g.used_homomorphisms |= f.used_homomorphisms
                 if len(g.used_homomorphisms) > old_len and callers[g]:
                     dirty.add(g)
@@ -87,9 +88,12 @@ class UsedHomomorphismsVisitor(AstVisitor):
 
     def visit(self, ast):
         all_homs = super().visit(ast)
+        # print("===visit============",type(ast))
         if hasattr(ast, 'used_homomorphisms'):
+            # print("===visit=======used_homomorphisms=====",type(ast))
             ast.used_homomorphisms = all_homs
         if hasattr(ast, 'used_crypto_backends'):
+            # print("===visit=======used_crypto_backends=====",type(ast))
             ast.used_crypto_backends = self.used_crypto_backends(all_homs)
         return all_homs
 

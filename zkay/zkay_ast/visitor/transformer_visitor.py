@@ -13,9 +13,9 @@ class AstTransformerVisitor:
     (Corresponds to node-or-children traversal order from AstVisitor)
     """
 
-    def __init__(self, log=False):
+    def __init__(self, log=False,is_trans=False):
         self.log = log
-
+        self.is_trans=is_trans
     def visit(self, ast):
         return self._visit_internal(ast)
 
@@ -30,18 +30,22 @@ class AstTransformerVisitor:
         if ast is None:
             return None
 
-        if self.log:
-            print('Visiting', type(ast))
+        # if self.log:
+        #     print('Visiting', type(ast))
         return self.get_visit_function(ast.__class__)(ast)
 
     def get_visit_function(self, c):
         visitor_function = 'visit' + c.__name__
         if hasattr(self, visitor_function):
+            # if self.is_trans:
+            #     print("========hasattr=========",c)
             return getattr(self, visitor_function)
         else:
             for base in c.__bases__:
                 f = self.get_visit_function(base)
                 if f:
+                    # if self.is_trans:
+                    #     print("========get_visit_function==base=======",c,base)
                     return f
         assert False
 

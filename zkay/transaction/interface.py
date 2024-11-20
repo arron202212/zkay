@@ -70,8 +70,12 @@ class ZkayBlockchainInterface(metaclass=ABCMeta):
 
     def pki_contract(self, crypto_backend: str):
         if self._pki_contract is None:
+            print("===pki_contract===========")
             self._connect_libraries()
-        return self._pki_contract[crypto_backend]
+        print("===pki_contract=======1====",crypto_backend)
+        c=self._pki_contract[crypto_backend]
+        print("===pki_contract======e=====",c)
+        return c
 
     @property
     def lib_addresses(self) -> Dict:

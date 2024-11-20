@@ -59,6 +59,7 @@ class JsnarkVisitor(AstVisitor):
         return f'_{stmt.fct.name}();'
 
     def visitCircVarDecl(self, stmt: CircVarDecl):
+        # print("=====visitCircVarDecl=================",type(stmt.expr))
         return f'decl("{stmt.lhs.name}", {self.visit(stmt.expr)});'
 
     def visitCircEqConstraint(self, stmt: CircEqConstraint):
@@ -106,6 +107,10 @@ class JsnarkVisitor(AstVisitor):
         if isinstance(ast.idf, HybridArgumentIdf) and ast.idf.t.is_cipher():
             return f'getCipher("{ast.idf.name}")'
         else:
+            # print("=======visitIdentifierExpr========",ast.idf.name)
+            # import traceback
+            # for line in traceback.format_stack():
+            #     print(line.strip())
             return f'get("{ast.idf.name}")'
 
     def visitMemberAccessExpr(self, ast: MemberAccessExpr):
@@ -121,6 +126,7 @@ class JsnarkVisitor(AstVisitor):
 
     def visitFunctionCallExpr(self, ast: FunctionCallExpr):
         if isinstance(ast.func, BuiltinFunction):
+            # print("====visitFunctionCallExpr===============BuiltinFunction=======")
             assert ast.func.can_be_private()
             args = list(map(self.visit, ast.args))
             if ast.func.is_shiftop():
@@ -156,15 +162,17 @@ class JsnarkVisitor(AstVisitor):
                         # re-randomize homomorphic scalar multiplication
                         rnd = self.visit(ast.func.rerand_using)
                         fstr = f'o_rerand({fstr}, "{crypto_backend}", "{public_key_name}", {rnd})'
-
+            # print("===fstr.format(*args)===============",fstr.format(*args))
             return fstr.format(*args)
         elif ast.is_cast and isinstance(ast.func.target, EnumDefinition):
+            # print("==EnumDefinition================")
             assert ast.annotated_type.type_name.elem_bitwidth == 256
             return self.handle_cast(self.visit(ast.args[0]), TypeName.uint_type())
 
         raise ValueError(f'Unsupported function {ast.func.code()} inside circuit')
 
     def visitPrimitiveCastExpr(self, ast: PrimitiveCastExpr):
+        # print("===visitPrimitiveCastExpr=========handle_cast==========",ast,type(ast.expr),self.handle_cast(self.visit(ast.expr), ast.elem_type))
         return self.handle_cast(self.visit(ast.expr), ast.elem_type)
 
     def handle_cast(self, wire, t: TypeName):
@@ -263,6 +271,7 @@ class JsnarkGenerator(CircuitGenerator):
     def _generate_keys(self, circuit: CircuitHelper):
         # Invoke the custom libsnark interface to generate keys
         output_dir = self._get_circuit_output_dir(circuit)
+        print("========_generate_keys=====in========")
         libsnark.generate_keys(output_dir, output_dir, self.proving_scheme.name)
 
     @classmethod
@@ -301,4 +310,5 @@ class JsnarkGenerator(CircuitGenerator):
 
     def _get_primary_inputs(self, circuit: CircuitHelper) -> List[str]:
         # Jsnark requires an additional public input with the value 1 as first input
+        # print("========================Jsnark_get_primary_inputs")
         return ['1'] + super()._get_primary_inputs(circuit)

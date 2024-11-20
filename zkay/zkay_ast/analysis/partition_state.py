@@ -150,6 +150,8 @@ class PartitionState(Generic[T]):
         # Collect all values
         my_vals = frozenset([item for subset in self._partitions.values() for item in subset])
         other_vals = frozenset([item for subset in other._partitions.values() for item in subset])
+        # print([x.code()  for x in my_vals],[x.code() for  x in other_vals])
+        # print(not my_vals.symmetric_difference(other_vals))
         assert not my_vals.symmetric_difference(other_vals), 'joined branches do not contain the same values'
         values_in_both = my_vals.intersection(other_vals)
 

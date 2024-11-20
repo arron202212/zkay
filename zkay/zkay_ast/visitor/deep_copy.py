@@ -102,7 +102,8 @@ class DeepCopyVisitor(AstVisitor):
     }
 
     def __init__(self, with_types, with_analysis):
-        super().__init__('node-or-children')
+        # print("=====DeepCopyVisitor======================")
+        super().__init__('node-or-children',is_deepcopy=False)
         self.with_types = with_types
         self.with_analysis = with_analysis
 
@@ -165,4 +166,5 @@ class DeepCopyVisitor(AstVisitor):
         elif isinstance(field, list):
             return [self.copy_field(e) for e in field]
         else:
+            # print(type(field))
             return self.visit(field)

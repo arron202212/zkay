@@ -196,6 +196,7 @@ def main():
 
     # Load configuration files
     try:
+        # print("======config_file==============",a.config_file)
         cfg.load_configuration_from_disk(a.config_file)
     except Exception as e:
         with fail_print():
@@ -368,6 +369,7 @@ def main():
                 if a.cmd == 'deploy':
                     from ast import literal_eval
                     cargs = a.constructor_args
+                    print("====='Contract' object is not subscriptable============",cargs)
                     args = []
                     for arg in cargs:
                         try:
@@ -390,6 +392,9 @@ def main():
                             exit(11)
                     except Exception as e:
                         with fail_print():
+                            import traceback
+                            for line in traceback.format_stack():
+                                print(line.strip())
                             print(f'ERROR: failed to deploy contract\n{e}')
                             exit(12)
                 elif a.cmd == 'connect':

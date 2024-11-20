@@ -162,6 +162,7 @@ class Remapper(Generic[K, V]):
                     key_decl = key.parent
                     assert key_decl.annotated_type is not None
                     prev_val = IdentifierExpr(key.clone()).as_type(key_decl.annotated_type.zkay_type.clone())
+                    # print("====join_branch===================",stmt,type(stmt))
                     prev_val = prev_val.override(target=key_decl, parent=stmt, statement=stmt)
                     self.rmap[key] = join(true_state[key].get_idf_expr(stmt), prev_val)
             else:
@@ -182,6 +183,7 @@ class Remapper(Generic[K, V]):
                     key_decl = key.parent
                     assert key_decl.annotated_type is not None
                     prev_val = IdentifierExpr(key.clone()).as_type(key_decl.annotated_type.zkay_type.clone())
+                    # print("====join_branch=======true_state============",stmt,type(stmt))
                     prev_val = prev_val.override(target=key_decl, parent=stmt, statement=stmt)
                     self.rmap[key] = join(prev_val, false_state[key].get_idf_expr(stmt))
 

@@ -234,9 +234,13 @@ class ContractSimulator:
     def initialize_keys_for(address: Union[bytes, str]):
         """Generate/Load keys for the given address."""
         account = AddressValue(address)
+        print("=====initialize_keys_for=======")
         for crypto_params in cfg.all_crypto_params():
+            print("=====initialize_keys_for===2====")
             if not Runtime.keystore(crypto_params).has_initialized_keys_for(AddressValue(address)):
+                print("=====initialize_keys_for===3====")
                 Runtime.crypto(crypto_params).generate_or_load_key_pair(account)
+                print("=====initialize_keys_for===4====")
 
     @staticmethod
     def use_config_from_manifest(project_dir: str):
